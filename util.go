@@ -11,10 +11,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 // sign generates a signature for a given string using the HMAC-SHA256 algorithm and a secret key.
@@ -71,56 +68,69 @@ func (c *CoinbaseAdvanced) signRequest(req *http.Request) {
 //
 // Parameters:
 //
-//	c        - a pointer to a websocket.Conn object representing the websocket connection
-//	output   - a channel of strings to which the received messages will be written
-//	shutdown - a channel of struct{} used to signal the function to shut down
-//	wg       - a pointer to a sync.WaitGroup object used to synchronize the function with other goroutines
+//		c        - a pointer to a websocket.Conn object representing the websocket connection
+//		output   - a channel of strings to which the received messages will be written
+//	            the channel is closed when the function returns
+//	            the output channel is an input to a pub/sub broadcaster
+//		shutdown - a channel of struct{} used to signal the function to shut down
+//		wg       - a pointer to a sync.WaitGroup object used to synchronize the function with other goroutines
 //
 // Returns: none
-func readAndWrite(c *websocket.Conn, output chan string, shutdown chan struct{}, wg *sync.WaitGroup) {
-	// Mark the wait group as done when the function returns
-	defer wg.Done()
+// func readAndWrite(c *websocket.Conn, output chan string, shutdown chan struct{}, wg *sync.WaitGroup, timeout int) {
+// 	// Add 1 to the wait group counter
+// 	wg.Add(1)
+// 	// Mark the wait group as done when the function returns
+// 	if wg != nil {
+// 		defer wg.Done()
+// 	}
 
-	var (
-		mutex   sync.Mutex // Mutex for synchronizing access to output channel
-		timeout = 15       // Time in seconds for stream timeout
-	)
+// 	var (
+// 		mutex sync.Mutex // Mutex for synchronizing access to output channel
+// 	)
 
-	// Create a timer with the specified timeout
-	timer := time.NewTimer(time.Duration(timeout) * time.Second)
-	defer timer.Stop() // Stop the timer when the function returns
+// 	// Create a timer with the specified timeout
+// 	timer := time.NewTimer(time.Duration(timeout) * time.Second)
+// 	defer timer.Stop() // Stop the timer when the function returns
 
-	for {
-		select {
-		case <-shutdown:
-			timer.Stop()   // Stop the timer
-			mutex.Unlock() // Release the mutex
-			close(output)  // Close the output channel
-			return
-		case <-timer.C:
-			fmt.Println("Timeout: shutting down stream")
-			close(output) // Close the output channel
-			return
-		default:
-			// Reset the timer if a message is received
-			if !timer.Stop() {
-				<-timer.C
-			}
-			timer.Reset(time.Duration(timeout) * time.Second)
+// 	for {
+// 		select {
+// 		case <-shutdown:
+// 			timer.Stop()   // Stop the timer
+// 			mutex.Unlock() // Release the mutex
+// 			// close(output)  // Close the output channel
+// 			return
+// 		case <-timer.C:
+// 			fmt.Println("Timeout: shutting down stream")
+// 			// close(output) // Close the output channel
+// 			return
+// 		default:
+// 			// Reset the timer if a message is received
+// 			if !timer.Stop() {
+// 				<-timer.C
+// 			}
+// 			timer.Reset(time.Duration(timeout) * time.Second)
 
-			// Read the message
-			_, message, err := c.ReadMessage()
-			if err != nil {
-				output <- fmt.Sprintf("read: %v", err)
-				return
-			}
-			s := string(message)
-			mutex.Lock()   // Lock the mutex to synchronize access to the output channel
-			output <- s    // Write the message to the output channel
-			mutex.Unlock() // Unlock the mutex
-		}
-	}
-}
+// 			// Read the message
+// 			_, message, err := c.ReadMessage()
+// 			if err != nil {
+// 				// Log the error instead of returning it
+// 				log.Printf("Error reading message: %v", err)
+// 				continue
+// 				// output <- fmt.Sprintf("read: %v", err)
+// 				// return
+// 			}
+// 			// Write the message to the output channel
+// 			// The mutex is used to synchronize access to the output channel
+// 			// This is necessary because the output channel is an input to a pub/sub broadcaster
+// 			// The broadcaster is used by multiple goroutines to broadcast messages to multiple subscribers
+// 			// The mutex ensures that only one goroutine at a time can write to the output channel
+// 			s := string(message)
+// 			mutex.Lock()   // Lock the mutex to synchronize access to the output channel
+// 			output <- s    // Write the message to the output channel
+// 			mutex.Unlock() // Unlock the mutex
+// 		}
+// 	}
+// }
 
 //	func (c *CoinbaseAdapter) signRequest(req *http.Request, timestamp string) {
 //		message := timestamp + req.Method + req.URL.Path

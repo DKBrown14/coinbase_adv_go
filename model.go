@@ -3,13 +3,12 @@ package coinbase_adv_go
 import (
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	// "backend/adapters"
 
-	"github.com/alexanderjophus/go-broadcast"
-	"github.com/gorilla/websocket"
+	// "github.com/alexanderjophus/go-broadcast"
+
 	"golang.org/x/time/rate"
 )
 
@@ -33,39 +32,6 @@ From: https://docs.cloud.coinbase.com/advanced-trade-api/docs/ws-channels
 	market_trades: 	Real-time updates every time a market trade happens
 */
 
-type subscribed struct {
-	broadcaster broadcast.Broadcaster[string] // The broadcaster that the data will be sent to
-	shutdown    chan struct{}                 // The channel to close the readAndWrite goroutine
-	wg          sync.WaitGroup                // The wait group to wait for the readAndWrite goroutine to finish
-}
-
-// type channelToFilter struct {
-// 	exchangeChannel string      // The channel name on the exchange
-// 	filter          interface{} // The filter to apply to the data. Placeholder for now.
-// }
-
-// // The channels that are subscribed to and the filter to apply to the data
-// // Provisionally, the filter has an input of the exchange returned data, and
-// // an output of the data to be sent to the adapter channel.
-// var channelFilter = map[string]channelToFilter{
-// 	"level2":        {"level2", nil},
-// 	"user":          {"user", nil},
-// 	"tickers":       {"tickers", nil},
-// 	"ticker_batch":  {"ticker_batch", nil},
-// 	"status":        {"status", nil},
-// 	"market_trades": {"market_trades", nil},
-// }
-
-type webSocketConnection struct {
-	conn         *websocket.Conn        // The websocket connection
-	subscribedTo map[string]*subscribed // The key is the websocket channels that are subscribed to
-}
-
-type subscribers struct {
-	sub    *subscribed
-	stream chan string
-}
-
 type CoinbaseAdvanced struct {
 	Name        string
 	Description string
@@ -74,7 +40,7 @@ type CoinbaseAdvanced struct {
 	apiBaseURL  string
 	rateLimiter *rate.Limiter
 	wsURL       string
-	wsList      map[string]*webSocketConnection
+	wsList      map[string]*WebSocketConnection // The key is the ProductID
 	apiKey      string
 	apiSecret   string
 	// Exchange    *adapters.ExchangeAdapter
@@ -86,7 +52,7 @@ func NewCoinbaseAdvanced(key, secret string) *CoinbaseAdvanced {
 		Name:        "Coinbase Advanced Trade",
 		Description: "Coinbase Advanced Trade API",
 		wsURL:       u.String(),
-		wsList:      make(map[string]*webSocketConnection),
+		wsList:      make(map[string]*WebSocketConnection),
 		apiBaseURL:  "https://api.coinbase.com",
 		apiEndpoint: "/api/v3/brokerage",
 		apiKey:      key,
