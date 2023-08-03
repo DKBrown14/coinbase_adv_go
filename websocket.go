@@ -32,7 +32,7 @@ type WebSocketConnection struct {
 // ChannelParams represents the parameters for a websocket channel subscription.
 type ChannelParams struct {
 	ChannelName string        // the name of the websocket channel
-	output      chan<- string // the output go channel for this websocket channel
+	Output      chan<- string // the output go channel for this websocket channel
 }
 
 // Channel represents a channel subscription for an application routine.
@@ -146,7 +146,7 @@ func (c *CoinbaseAdvanced) Subscribe(ctx context.Context, sub *ChannelParams, pr
 	}
 	// add the output channel to the channel's output list
 	wsConnection.channelList[sub.ChannelName].mux.Lock()                       // lock the channel for writing
-	wsConnection.channelList[sub.ChannelName].Outputs[sub.output] = sub.output // add the output channel to the channel's output list
+	wsConnection.channelList[sub.ChannelName].Outputs[sub.Output] = sub.Output // add the output channel to the channel's output list
 	wsConnection.channelList[sub.ChannelName].mux.Unlock()                     // unlock the channel
 
 	// start the dispatcher
@@ -172,7 +172,7 @@ func (c *CoinbaseAdvanced) Unsubscribe(ctx context.Context, wsConnection *WebSoc
 	if wsConnection == nil {
 		return errors.New("websocket connection is nil")
 	}
-	if sub == nil || sub.ChannelName == "" || sub.output == nil {
+	if sub == nil || sub.ChannelName == "" || sub.Output == nil {
 		return errors.New("invalid subscription parameters")
 	}
 
@@ -189,7 +189,7 @@ func (c *CoinbaseAdvanced) Unsubscribe(ctx context.Context, wsConnection *WebSoc
 	defer wsConnection.mutex.Unlock()
 
 	// unregister the output channel from the channel's output list
-	delete(channel.Outputs, sub.output)
+	delete(channel.Outputs, sub.Output)
 
 	// Unsubscribe from the websocket channel if the output list is empty
 	if len(channel.Outputs) == 0 {
