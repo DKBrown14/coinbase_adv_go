@@ -2,6 +2,7 @@ package coinbase_adv_go
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"strings"
@@ -22,11 +23,11 @@ import (
 
 // WebSocketConnection represents a websocket connection to the Coinbase Advanced API.
 type WebSocketConnection struct {
-	conn        *websocket.Conn     // The websocket connection
-	channelList map[string]*Channel // The key is the websocket channel that are subscribed to ie. "ticker"
-	mutex       *sync.RWMutex       // Mutex for synchronizing access to subscriptions
-	productIDs  []string            // The product IDs for this websocket connection
-	shutdown    chan struct{}       // The channel to close the dispatcher goroutine
+	conn        *websocket.Conn                    // The websocket connection
+	channelList *ChannelMap[chan<- string, string] // The key is the websocket channel that are subscribed to ie. "ticker"
+	mutex       *sync.RWMutex                      // Mutex for synchronizing access to subscriptions
+	productIDs  []string                           // The product IDs for this websocket connection
+	shutdown    chan struct{}                      // The channel to close the dispatcher goroutine
 }
 
 // ChannelParams represents the parameters for a websocket channel subscription.
@@ -42,6 +43,11 @@ type Channel struct {
 	Outputs     map[chan<- string]chan<- string // the output go channels for this websocket channel
 }
 
+// TODO: Rewrite the dispatcher to allow multiple subscriptions to the same go channel.
+//
+//	This will require a change to the Channel struct to allow multiple output channels.
+//	Also allow certain channels to be filtered from the output channel. (ie. heartbeat)
+//
 // Dispatcher reads messages from the websocket connection and sends them to the appropriate output channels.
 // The function runs in a separate goroutine and returns when the shutdown channel is closed.
 // The output channels are NOT closed when the function returns.
@@ -64,9 +70,21 @@ func Dispatcher(ws *WebSocketConnection) {
 				log.Printf("Error reading message: %v", err)
 				continue
 			}
-			log.Printf("Message: %v", string(message))
-			// send the message to the dispatcher
-			// dispatcher <- message
+			// get the channel name from the message
+			var channelName string
+			if err := json.Unmarshal(message, &channelName); err != nil {
+				// log the error instead of returning it
+				log.Printf("Error unmarshalling message: %v", err)
+				continue
+			}
+			log.Printf("Channel: %v", channelName)
+			// get the output channels for the websocket channel
+			outputs := ws.channelList.GetKeysForValue(channelName)
+			// send the message to the output channels
+			for _, output := range outputs {
+				output <- string(message)
+			}
+			// log.Printf("Message: %v", string(message))
 		}
 	}
 }
@@ -77,6 +95,7 @@ func Dispatcher(ws *WebSocketConnection) {
 //   dispatcher is shared between them.
 // Each websocket channel has its own dispatcher. If multiple subscriptions are made to the same channel, the dispatcher is
 // shared between them.
+// Note: On the creation of a new websocket connection, the heartbeat channel is automatically subscribed to.
 // Parameters:
 //   ctx        - a context.Context object
 //   sub        - a pointer to a ChannelParams object representing the websocket channel subscription
@@ -108,18 +127,20 @@ func (c *CoinbaseAdvanced) Subscribe(ctx context.Context, sub *ChannelParams, pr
 		}
 		// Create the WebSocketConnection object
 		wsConnection = &WebSocketConnection{
-			conn:        wsConnect,                 // the websocket connection
-			channelList: make(map[string]*Channel), // the channels for this websocket connection
-			mutex:       new(sync.RWMutex),         // the mutex for this websocket connection
-			productIDs:  productIDs,                // the product IDs for this websocket connection
-			shutdown:    make(chan struct{}),       // the shutdown channel
+			conn:        wsConnect,                              // the websocket connection
+			channelList: NewChannelMap[chan<- string, string](), // the channels for this websocket connection
+			mutex:       new(sync.RWMutex),                      // the mutex for this websocket connection
+			productIDs:  productIDs,                             // the product IDs for this websocket connection
+			shutdown:    make(chan struct{}),                    // the shutdown channel
 		}
 		// Save the WebSocketConnection object
 		c.wsList[wsKey] = wsConnection
 	}
 	// Is this websocket channel already subscribed to?
-	_, ok = wsConnection.channelList[sub.ChannelName]
-	if !ok {
+	channels := wsConnection.channelList.GetKeysForValue(sub.ChannelName)
+	if len(channels) == 0 {
+		// _, ok = wsConnection.channelList[sub.ChannelName]
+		// if !ok {
 		// no, subscribe to the websocket channel
 		// create the subscription message
 		subMsg := map[string]interface{}{
@@ -135,19 +156,36 @@ func (c *CoinbaseAdvanced) Subscribe(ctx context.Context, sub *ChannelParams, pr
 		if err != nil {
 			return nil, err
 		}
-		// create the channel subscription object
-		wsConnection.mutex.Lock() // lock the websocket connection for writing
-		wsConnection.channelList[sub.ChannelName] = &Channel{
-			ChannelName: sub.ChannelName,                       // the name of the websocket channel
-			mux:         new(sync.RWMutex),                     // the mutex for this websocket channel
-			Outputs:     make(map[chan<- string]chan<- string), // the output go channels for this websocket channel
+		// subscribe to the heartbeat channel
+		// create the subscription message
+		subMsg = map[string]interface{}{
+			"type":        "subscribe",
+			"channel":     "heartbeat",
+			"api_key":     c.apiKey,
+			"product_ids": productIDs,
 		}
-		wsConnection.mutex.Unlock() // unlock the websocket connection
+		// sign the subscription message
+		subMsg = c.timestampAndSign(subMsg, "heartbeat", productIDs)
+		// send the subscription message
+		err = wsConnection.conn.WriteJSON(subMsg)
+		if err != nil {
+			return nil, err
+		}
+
+		// create the channel subscription object
+		// wsConnection.mutex.Lock() // lock the websocket connection for writing
+		// wsConnection.channelList[sub.ChannelName] = &Channel{
+		// 	ChannelName: sub.ChannelName,                       // the name of the websocket channel
+		// 	mux:         new(sync.RWMutex),                     // the mutex for this websocket channel
+		// 	Outputs:     make(map[chan<- string]chan<- string), // the output go channels for this websocket channel
+		// }
+		// wsConnection.mutex.Unlock() // unlock the websocket connection
 	}
 	// add the output channel to the channel's output list
-	wsConnection.channelList[sub.ChannelName].mux.Lock()                       // lock the channel for writing
-	wsConnection.channelList[sub.ChannelName].Outputs[sub.Output] = sub.Output // add the output channel to the channel's output list
-	wsConnection.channelList[sub.ChannelName].mux.Unlock()                     // unlock the channel
+	wsConnection.channelList.Add(sub.Output, sub.ChannelName)
+	// wsConnection.channelList[sub.ChannelName].mux.Lock()                       // lock the channel for writing
+	// wsConnection.channelList[sub.ChannelName].Outputs[sub.Output] = sub.Output // add the output channel to the channel's output list
+	// wsConnection.channelList[sub.ChannelName].mux.Unlock()                     // unlock the channel
 
 	// start the dispatcher
 	go Dispatcher(wsConnection)
@@ -167,32 +205,24 @@ func (c *CoinbaseAdvanced) Subscribe(ctx context.Context, sub *ChannelParams, pr
 // Returns:
 //   err - an error object
 
-func (c *CoinbaseAdvanced) Unsubscribe(ctx context.Context, wsConnection *WebSocketConnection, sub *ChannelParams) (err error) {
-	// validate parameters
-	if wsConnection == nil {
-		return errors.New("websocket connection is nil")
-	}
-	if sub == nil || sub.ChannelName == "" || sub.Output == nil {
+func (c *CoinbaseAdvanced) Unsubscribe(ctx context.Context, wsConnection *WebSocketConnection, sub *ChannelParams) error {
+	// Validate parameters
+	if wsConnection == nil || sub == nil || sub.ChannelName == "" || sub.Output == nil {
 		return errors.New("invalid subscription parameters")
 	}
 
 	// Check if the websocket channel is subscribed to
-	channel, ok := wsConnection.channelList[sub.ChannelName]
-	if !ok || channel == nil {
+	channelKeys := wsConnection.channelList.GetKeysForValue(sub.ChannelName)
+	if len(channelKeys) == 0 {
 		return errors.New("websocket channel is not subscribed to")
 	}
-	// Lock the channel for writing
-	channel.mux.Lock()
-	defer channel.mux.Unlock()
-	// Lock the websocket connection for writing
-	wsConnection.mutex.Lock()
-	defer wsConnection.mutex.Unlock()
 
-	// unregister the output channel from the channel's output list
-	delete(channel.Outputs, sub.Output)
+	// Remove the output channel from the channel's output list
+	channel := wsConnection.channelList
+	isEmpty := channel.Remove(sub.Output)
 
 	// Unsubscribe from the websocket channel if the output list is empty
-	if len(channel.Outputs) == 0 {
+	if isEmpty {
 		// Create the subscription message
 		subMsg := map[string]interface{}{
 			"type":    "unsubscribe",
@@ -206,8 +236,98 @@ func (c *CoinbaseAdvanced) Unsubscribe(ctx context.Context, wsConnection *WebSoc
 		}
 		// Close the shutdown channel
 		close(wsConnection.shutdown)
-		// Delete the channel from the websocket connection's channel list
-		delete(wsConnection.channelList, sub.ChannelName)
+		// Delete the websocket from the CoinbaseAdvanced object
+		keys := strings.Join(wsConnection.productIDs, ",")
+		delete(c.wsList, keys)
+		// delete(wsConnection.channelList, channelKeys[0])
 	}
-	return
+	return nil
+}
+
+// ChannelMap is a generic map-like structure with duplicate keys.
+// It associates multiple values with each key and allows concurrent access.
+type ChannelMap[K comparable, V comparable] struct {
+	normalMap  map[K][]V
+	reverseMap map[V][]K
+	mutex      sync.Mutex
+}
+
+// NewChannelMap creates a new instance of ChannelMap with the specified data types for keys and values.
+func NewChannelMap[K comparable, V comparable]() *ChannelMap[K, V] {
+	return &ChannelMap[K, V]{
+		normalMap:  make(map[K][]V),
+		reverseMap: make(map[V][]K),
+	}
+}
+
+func (cm *ChannelMap[K, V]) Add(key K, values ...V) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	cm.normalMap[key] = append(cm.normalMap[key], values...)
+	for _, val := range values {
+		cm.reverseMap[val] = append(cm.reverseMap[val], key)
+	}
+}
+
+func (cm *ChannelMap[K, V]) Remove(key K, values ...V) (isEmpty bool) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	isEmpty = false
+
+	if vals, exists := cm.normalMap[key]; exists {
+		for _, val := range values {
+			for i, v := range vals {
+				if val == v {
+					// Remove the value from the slice
+					cm.normalMap[key] = append(vals[:i], vals[i+1:]...)
+					break
+				}
+			}
+			// Remove the key from the reverse map
+			if keys, found := cm.reverseMap[val]; found {
+				for i, k := range keys {
+					if k == key {
+						cm.reverseMap[val] = append(keys[:i], keys[i+1:]...)
+						break
+					}
+				}
+				if len(cm.reverseMap[val]) == 0 {
+					delete(cm.reverseMap, val)                  // Delete the reverseMap entry if empty
+					isEmpty = isEmpty || len(cm.normalMap) == 0 // Check if the ChannelMap is empty
+				}
+			}
+		}
+
+		// Remove the key from the normal map if the slice is empty
+		if len(cm.normalMap[key]) == 0 {
+			delete(cm.normalMap, key)
+			isEmpty = isEmpty || len(cm.normalMap) == 0 // Check if the ChannelMap is empty
+		}
+	}
+
+	return isEmpty
+}
+
+func (cm *ChannelMap[K, V]) GetKeysForValue(value V) []K {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	if keys, found := cm.reverseMap[value]; found {
+		return keys
+	}
+
+	return nil
+}
+
+func (cm *ChannelMap[K, V]) GetValuesForKey(key K) []V {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	if values, exists := cm.normalMap[key]; exists {
+		return values
+	}
+
+	return nil
 }
