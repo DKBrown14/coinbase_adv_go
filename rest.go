@@ -284,7 +284,7 @@ func (c *CoinbaseAdvanced) CancelOrders(ctx context.Context, order_ids []string)
 
 type ListOrdersParams struct {
 	ProductID            string    `param:"product_id"`
-	OrderStatus          string    `param:"order_status"`
+	OrderStatus          []string  `param:"order_status"`
 	Limit                int       `param:"limit"`
 	StartDate            time.Time `param:"start_date"`
 	EndDate              time.Time `param:"end_date"`
@@ -305,7 +305,7 @@ func (c *CoinbaseAdvanced) listOrders(ctx context.Context, params *ListOrdersPar
 		Args:
 		- product_id: Optional string of the product ID.
 					  Defaults to null, or fetch for all products.
-		- order_status: A list of order statuses.
+		- order_status: A slice of order statuses. ie. []string{"FILLED", "CANCELLED"}
 		- limit: A pagination limit with no default set.
 				 If has_next is true, additional orders are available
 				 to be fetched with pagination; also the cursor value
@@ -358,12 +358,12 @@ func (c *CoinbaseAdvanced) listOrders(ctx context.Context, params *ListOrdersPar
 }
 
 // Iterate through all orders if HasNext is true
-func (c *CoinbaseAdvanced) ListOrders(ctx context.Context, params *ListOrdersParams) (OrderList, error) {
-	orderList := OrderList{}
+func (c *CoinbaseAdvanced) ListOrders(ctx context.Context, params *ListOrdersParams) (*OrderList, error) {
+	orderList := &OrderList{}
 	for {
 		response, err := c.listOrders(ctx, params)
 		if err != nil {
-			return OrderList{}, err
+			return nil, err
 		}
 		orderList.Orders = append(orderList.Orders, response.Orders...)
 		orderList.Cursor = response.Cursor

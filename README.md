@@ -1,16 +1,22 @@
-Coinbase Advanced Go Client
+# Coinbase Advanced Go Client
+
 This is a Go client library for the Coinbase Advanced Trade API. It provides a simple interface for accessing real-time market data and trading on the Coinbase Advanced exchange.
 
-Installation
+## Installation
+
 To install the library, use the following command:
 
-go get github.com/DKBrown14/coinbase-advanced-go
+```bash
+go get github.com/DKBrown14/coinbase-advanced-go 
+```
 
-Usage
+## Usage
+
 To use the library, import the github.com/your-username/coinbase-advanced-go package in your Go code.
 
 Here's an example of how to use the library to subscribe to the ticker channel:
 
+```go
 package main
 
 import (
@@ -20,6 +26,26 @@ import (
 )
 
 func main() {
+    // create a new client with your API key and secret
+    client, err := coinbase_adv_go.NewClient("your-api-key", "your-api-secret")
+    if err != nil {
+        fmt.Println("Error creating client:", err)
+        return
+    }
+    // get a list of all products
+    productParams := &coinbase_adv_go.ListProductParams{
+        product_type: "SPOT",
+    }
+    products, err := client.ListProducts(context.Background(), productParams)
+    if err != nil {
+        fmt.Println("Error getting products:", err)
+        return
+    }
+    fmt.Println("Products:")
+    for _, product := range products {
+        fmt.Println(product.ID)
+    }
+    
     // Create a new WebSocket connection
     wsConn := coinbase_adv_go.NewWebSocketConnection([]string{"BTC-USD", "ETH-USD"})
 
@@ -51,16 +77,28 @@ func main() {
         return
     }
 }
-API Reference
+```
+
+## API Reference
+
 The library provides the following types:
 
 WebSocketConnection: A WebSocket connection to the Coinbase Advanced Trade API.
 ChannelParams: Parameters for subscribing to a WebSocket channel.
 The library provides the following functions:
 
-NewWebSocketConnection(productIDs []string) *WebSocketConnection: Creates a new WebSocket connection to the Coinbase Advanced Trade API.
+```go
+NewWebSocketConnection(productIDs []string) *WebSocketConnection: Creates a new WebSocket connection to the Coinbase 
+```
+
+## Advanced Trade API
+
+```go
 (*WebSocketConnection) Subscribe(ctx context.Context, sub *ChannelParams) error: Subscribes to a WebSocket channel.
 (*WebSocketConnection) Unsubscribe(ctx context.Context, sub *ChannelParams) error: Unsubscribes from a WebSocket channel.
 (*WebSocketConnection) Close() error: Closes the WebSocket connection.
-License
+```
+
+## License
+
 This library is licensed under the MIT License. See the LICENSE file for details.

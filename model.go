@@ -430,3 +430,177 @@ type UserOrders struct {
 	OrderType          string    `json:"order_type"`
 	OrderSide          string    `json:"order_side"`
 }
+
+// Following are the structs for the websocket messages
+type WsHeartbeatsMessage struct {
+	Channel     string              `json:"channel"`
+	ClientID    string              `json:"client_id"`
+	Timestamp   string              `json:"timestamp"`
+	SequenceNum int                 `json:"sequence_num"`
+	Events      []WsHeartbeatsEvent `json:"events"`
+}
+
+type WsHeartbeatsEvent struct {
+	CurrentTime      string `json:"current_time"`
+	HeartbeatCounter int    `json:"heartbeat_counter"`
+}
+
+type WsCandlesMessage struct {
+	Channel     string           `json:"channel"`
+	ClientID    string           `json:"client_id"`
+	Timestamp   string           `json:"timestamp"`
+	SequenceNum int              `json:"sequence_num"`
+	Events      []WsCandlesEvent `json:"events"`
+}
+
+type WsCandlesEvent struct {
+	Type    string     `json:"type"`
+	Candles []WsCandle `json:"candles"`
+}
+
+type WsCandle struct {
+	Start     string `json:"start"`
+	High      string `json:"high"`
+	Low       string `json:"low"`
+	Open      string `json:"open"`
+	Close     string `json:"close"`
+	Volume    string `json:"volume"`
+	ProductID string `json:"product_id"`
+}
+
+type WsMarketTradesMessage struct {
+	Channel     string                `json:"channel"`
+	ClientID    string                `json:"client_id"`
+	Timestamp   string                `json:"timestamp"`
+	SequenceNum int                   `json:"sequence_num"`
+	Events      []WsMarketTradesEvent `json:"events"`
+}
+
+type WsMarketTradesEvent struct {
+	Type   string    `json:"type"`
+	Trades []WsTrade `json:"trades"`
+}
+
+type WsTrade struct {
+	TradeID   string `json:"trade_id"`
+	ProductID string `json:"product_id"`
+	Price     string `json:"price"`
+	Size      string `json:"size"`
+	Side      string `json:"side"`
+	Time      string `json:"time"`
+}
+
+type WsStatusMessage struct {
+	Channel     string          `json:"channel"`
+	ClientID    string          `json:"client_id"`
+	Timestamp   string          `json:"timestamp"`
+	SequenceNum int             `json:"sequence_num"`
+	Events      []WsStatusEvent `json:"events"`
+}
+
+type WsStatusEvent struct {
+	Type     string      `json:"type"`
+	Products []WsProduct `json:"products"`
+}
+
+type WsProduct struct {
+	ProductType    string `json:"product_type"`
+	ID             string `json:"id"`
+	BaseCurrency   string `json:"base_currency"`
+	QuoteCurrency  string `json:"quote_currency"`
+	BaseIncrement  string `json:"base_increment"`
+	QuoteIncrement string `json:"quote_increment"`
+	DisplayName    string `json:"display_name"`
+	Status         string `json:"status"`
+	StatusMessage  string `json:"status_message"`
+	MinMarketFunds string `json:"min_market_funds"`
+}
+
+type WsTickerMessage struct {
+	Channel     string          `json:"channel"`
+	ClientID    string          `json:"client_id"`
+	Timestamp   string          `json:"timestamp"`
+	SequenceNum int             `json:"sequence_num"`
+	Events      []WsTickerEvent `json:"events"`
+}
+
+type WsTickerEvent struct {
+	Type    string     `json:"type"`
+	Tickers []WsTicker `json:"tickers"`
+}
+
+type WsTicker struct {
+	Type               string `json:"type"`
+	ProductID          string `json:"product_id"`
+	Price              string `json:"price"`
+	Volume24H          string `json:"volume_24_h"`
+	Low24H             string `json:"low_24_h"`
+	High24H            string `json:"high_24_h"`
+	Low52W             string `json:"low_52_w"`
+	High52W            string `json:"high_52_w"`
+	PricePercentChg24H string `json:"price_percent_chg_24_h"`
+}
+
+type WsLevel2Message struct {
+	Channel     string          `json:"channel"`
+	ClientID    string          `json:"client_id"`
+	Timestamp   string          `json:"timestamp"`
+	SequenceNum int             `json:"sequence_num"`
+	Events      []WsLevel2Event `json:"events"`
+}
+
+type WsLevel2Event struct {
+	Type      string           `json:"type"`
+	ProductID string           `json:"product_id"`
+	Updates   []WsLevel2Update `json:"updates"`
+}
+
+type WsLevel2Update struct {
+	Side        string `json:"side"`
+	EventTime   string `json:"event_time"`
+	PriceLevel  string `json:"price_level"`
+	NewQuantity string `json:"new_quantity"`
+}
+
+type WsUserMessage struct {
+	Channel     string        `json:"channel"`
+	ClientID    string        `json:"client_id"`
+	Timestamp   string        `json:"timestamp"`
+	SequenceNum int           `json:"sequence_num"`
+	Events      []WsUserEvent `json:"events"`
+}
+
+type WsUserEvent struct {
+	Type   string    `json:"type"`
+	Orders []WsOrder `json:"orders"`
+}
+
+type WsOrder struct {
+	OrderID            string `json:"order_id"`
+	ClientOrderID      string `json:"client_order_id"`
+	CumulativeQuantity string `json:"cumulative_quantity"`
+	LeavesQuantity     string `json:"leaves_quantity"`
+	AvgPrice           string `json:"avg_price"`
+	TotalFees          string `json:"total_fees"`
+	Status             string `json:"status"`
+	ProductID          string `json:"product_id"`
+	CreationTime       string `json:"creation_time"`
+	OrderSide          string `json:"order_side"`
+	OrderType          string `json:"order_type"`
+}
+
+type WsSubscriptionMessage struct {
+	Channel     string                `json:"channel"`
+	ClientID    string                `json:"client_id"`
+	Timestamp   string                `json:"timestamp"`
+	SequenceNum int                   `json:"sequence_num"`
+	Events      []WsSubscriptionEvent `json:"events"`
+}
+
+type WsSubscriptionEvent struct {
+	Subscriptions WsSubscriptions `json:"subscriptions"`
+}
+
+type WsSubscriptions struct {
+	User []string `json:"user"`
+}

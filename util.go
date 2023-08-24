@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -142,7 +143,7 @@ func (c *CoinbaseAdvanced) signRequest(req *http.Request) {
 //		req.Header.Set("CB-ACCESS-KEY", c.apiKey)
 //	}
 
-func (c *CoinbaseAdvanced) doRequest(ctx context.Context, method, requestPath string, query url.Values, body *strings.Reader) (*http.Response, error) {
+func (c *CoinbaseAdvanced) doRequest(ctx context.Context, method, requestPath string, query url.Values, body io.Reader) (*http.Response, error) {
 	URL, _ := url.Parse(c.apiBaseURL + c.apiEndpoint + requestPath)
 
 	req, err := http.NewRequestWithContext(ctx, method, URL.String(), body)
@@ -229,6 +230,10 @@ func (c *CoinbaseAdvanced) addParamsToQuery(params interface{}, query_params url
 				query_params.Add(paramName, strconv.FormatInt(field.Int(), 10))
 			case reflect.Struct:
 				query_params.Add(paramName, field.Interface().(time.Time).Format(time.RFC3339))
+			case reflect.Slice:
+				for i := 0; i < field.Len(); i++ {
+					query_params.Add(paramName, field.Index(i).String())
+				}
 			}
 		}
 	}
